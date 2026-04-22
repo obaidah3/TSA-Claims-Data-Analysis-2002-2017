@@ -1,0 +1,163 @@
+/*   1) IMPORT DATA FROM LOCAL FILE */
+proc import datafile="/home/u64469466/Project/TSAClaims2002_2017.csv" 
+		out=work.claims_raw dbms=csv replace;
+	guessingrows=max;
+run;
+
+/*   2) CHECK IMPORT */
+proc contents data=work.claims_raw;
+run;
+
+proc print data=work.claims_raw(obs=10);
+run;
+
+/*   1) REMOVE  DUPLICATED ROWS */
+proc sort data=work.claims_raw out=work.claims_nodup noduprecs;
+	by _all_;
+run;
+
+/* 2) CLEAN DATA */
+data work.claims_clean_step1;
+	set work.claims_nodup;
+	length Date_Issues $20;
+
+	/* State formatting */
+	State=upcase(strip(State));
+	StateName=upcase(strip(StateName));
+
+	/* Text cleanup */
+	Claim_Type=strip(propcase(Claim_Type));
+	Claim_Site=strip(propcase(Claim_Site));
+	Disposition=strip(propcase(Disposition));
+
+	/* Missing-like cleanup */
+	if missing(Claim_Type) or Claim_Type='-' then
+		Claim_Type='Unknown';
+
+	if missing(Claim_Site) or Claim_Site='-' then
+		Claim_Site='Unknown';
+
+	if missing(Disposition) or Disposition='-' then
+		Disposition='Unknown';
+
+	/* Date validation */
+	if missing(Incident_Date) or missing(Date_Received) then
+		Date_Issues='Needs Review';
+	else if year(Date_Received) < 2002 or year(Date_Received) > 2017 then
+		Date_Issues='Needs Review';
+	else if year(Incident_Date) < 2002 or year(Incident_Date) > 2017 then
+		Date_Issues='Needs Review';
+	else if Incident_Date > Date_Received then
+		Date_Issues='Needs Review';
+
+	if Disposition in ('Closed:canceled', 'Closed: Canceled') then
+		Disposition='Closed: Canceled';
+
+	if Disposition in ('Closed:contractor Claim', 'Closed as contractor claim') 
+		then
+			Disposition='Closed: Contractor Claim';
+
+	if Disposition='Losed: Contractor Claim' then
+		Disposition='Closed: Contractor Claim';
+
+	if Disposition in ('Deny', 'Denied') then
+		Disposition='Denied';
+
+	if Disposition in ('Settle', 'Settled') then
+		Disposition='Settled';
+run;
+
+/* 3) FINAL CLEANED DATASET */
+data work.claims_cleaned;
+	set work.claims_clean_step1;
+	drop County City;
+	format Close_Amount dollar12.2 Incident_Date date9.
+           Date_Received date9.;
+	label Claim_Number="Claim Number" Date_Received="Date Received" 
+		Incident_Date="Incident Date" Airport_Code="Airport Code" 
+		Airport_Name="Airport Name" Claim_Type="Claim Type" Claim_Site="Claim Site" 
+		Item_Category="Item Category" Close_Amount="Close Amount" 
+		StateName="State Name" Date_Issues="Date Issues";
+run;
+
+/* 4) SORT FINAL DATA */
+proc sort data=work.claims_cleaned;
+	by Incident_Date;
+run;
+
+/* 5) CREATE ANALYSIS DATASET */
+data work.claims_analysis;
+	set work.claims_cleaned;
+
+	if Date_Issues ne 'Needs Review';
+	Incident_Year=year(Incident_Date);
+run;
+
+/* 6) CHECK RESULTS */
+proc contents data=work.claims_cleaned;
+run;
+
+proc print data=work.claims_cleaned(obs=10);
+run;
+
+proc freq data=work.claims_cleaned;
+	tables Date_Issues / missing;
+run;
+
+%let selected_state = CALIFORNIA;
+
+data work.state_claims;
+	set work.claims_analysis;
+
+	if StateName="&selected_state";
+run;
+
+ods pdf file="/home/u64469466/Project/TSA_Claims_Report.pdf" style=htmlblue;
+title "TSA Claims Analysis Report";
+
+/* Overall Data */
+title2 "Overall Data: Date Issues Count";
+
+proc freq data=work.claims_cleaned;
+	tables Date_Issues / missing;
+run;
+
+title2 "Overall Data: Number of Claims by Incident Year";
+
+proc freq data=work.claims_analysis;
+	tables Incident_Year / nocum;
+run;
+
+proc sgplot data=work.claims_analysis;
+	vbar Incident_Year;
+	xaxis label="Incident Year";
+	yaxis label="Number of Claims";
+run;
+
+/* Selected State */
+title2 "State Analysis for &selected_state: Claim Type";
+
+proc freq data=work.state_claims;
+	tables Claim_Type / missing;
+run;
+
+title2 "State Analysis for &selected_state: Claim Site";
+
+proc freq data=work.state_claims;
+	tables Claim_Site / missing;
+run;
+
+title2 "State Analysis for &selected_state: Disposition";
+
+proc freq data=work.state_claims;
+	tables Disposition / missing;
+run;
+
+title2 "State Analysis for &selected_state: Close Amount Statistics";
+
+proc means data=work.state_claims mean min max sum maxdec=0;
+	var Close_Amount;
+run;
+
+ods pdf close;
+title;
