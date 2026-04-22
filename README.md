@@ -24,16 +24,6 @@ The goal is to transform raw, inconsistent data into a clean and structured data
   * Frequency distributions
   * Visual charts
 
----
-
-## 📂 Project Structure
-
-```
-📁 Project/
-│── TSAClaims2002_2017.csv     # Raw dataset
-│── README.md                  # Project documentation
-│── TSA_Claims_Report.pdf      # Final generated report
-```
 
 ---
 
