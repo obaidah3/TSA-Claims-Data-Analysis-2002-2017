@@ -100,7 +100,7 @@ Date_Issues = "Needs Review"
 If:
 
 * Missing dates
-* Dates خارج range (2002–2017)
+* Dates Out of the range (2002–2017)
 * Incident_Date > Date_Received
 
 ---
